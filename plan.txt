@@ -1,0 +1,170 @@
+ PaissaAggregator — FF XIV Housing Plot Leaderboard
+
+ Context
+
+ Goal: Build a full-stack app that aggregates FF XIV housing plot availability from the PAISSADB API, stores it locally in PostgreSQL, and displays which datacenters have the most plots and a world
+ leaderboard ranked by available plots filtered by size (small/medium/large) and ownership type (FC-only / individual-only / unrestricted) shown in separate tabs.
+
+ Why: Hunting a house in FFXIV requires scanning many worlds quickly. A cached, aggregated view lets players pick a datacenter and world at a glance instead of querying each world repeatedly.
+
+ Data source — PAISSADB API:
+ - GET /worlds → 85 worlds: {id, name, datacenter_id, datacenter_name}
+ - GET /worlds/{id} → {id, name, districts:[{id, name, num_open_plots, oldest_plot_time, open_plots:[{world_id, district_id, ward_number, plot_number, size, price, purchase_system, lotto_entries, lotto_phase,
+  lotto_phase_until, ...}]}], num_open_plots, oldest_plot_time}
+ - size: 0 = small, 1 = medium, 2 = large
+ - purchase_system: 1/4/7 = FC-only, 2/5/8 = individual-only, 3/6/9 = unrestricted (the three ownership tabs)
+ - Display rule: add 1 to ward_number/plot_number to match in-game numbers.
+
+ Tech Stack
+
+ ┌──────────┬─────────────────────────────────────────────────────────────────────────────────────┐
+ │  Layer   │                                       Choice                                        │
+ ├──────────┼─────────────────────────────────────────────────────────────────────────────────────┤
+ │ Backend  │ Java 21, Spring Boot 3, Spring Data JPA, Lombok, MapStruct, Spring Retry/Scheduling │
+ ├──────────┼─────────────────────────────────────────────────────────────────────────────────────┤
+ │ Database │ PostgreSQL                                                                          │
+ ├──────────┼─────────────────────────────────────────────────────────────────────────────────────┤
+ │ Frontend │ React 19, TypeScript, Vite, Axios, Tailwind CSS                                     │
+ ├──────────┼─────────────────────────────────────────────────────────────────────────────────────┤
+ │ DevOps   │ Docker Compose (postgres + backend + frontend), optional nginx later                │
+ └──────────┴─────────────────────────────────────────────────────────────────────────────────────┘
+
+ Architecture
+
+ Backend — DDD bounded contexts
+
+ backend/src/main/java/com/paissa/aggregator/
+ ├── PaissaAggregatorApplication.java
+ ├── world/                       # World context — datacenters, worlds, districts
+ │   ├── Datacenter.java
+ │   ├── World.java
+ │   ├── District.java
+ │   ├── WorldRepository.java
+ │   └── WorldService.java
+ ├── housing/                     # Housing context — wards, plots
+ │   ├── Ward.java
+ │   ├── Plot.java
+ │   ├── PurchaseSystem.java      # enum: FC_ONLY(1,4,7) / INDIVIDUAL_ONLY(2,5,8) / UNRESTRICTED(3,6,9)
+ │   ├── PlotSize.java            # enum: SMALL, MEDIUM, LARGE
+ │   ├── PlotRepository.java
+ │   └── PlotService.java
+ ├── ingestion/                   # PAISSADB client + sync job
+ │   ├── PaissaApiClient.java     # WebClient calls to paissadb.zhu.codes
+ │   ├── PlotSyncJob.java         # @Scheduled every 15 min + manual trigger
+ │   ├── RefreshService.java
+ │   └── PAISSA world+plot DTOs
+ ├── query/                       # Read-optimized queries for dashboards
+ │   ├── DatacenterSummary.java
+ │   ├── WorldStats.java
+ │   ├── QueryService.java
+ │   └── PlotQueryRepository.java (custom JPA queries)
+ └── api/
+     ├── WorldController.java
+     ├── QueryController.java     # datacenter summaries + leaderboard
+     ├── RefreshController.java    # POST /api/refresh (admin)
+     ├── PlotMapper.java           # MapStruct
+     └── dto/
+
+ DB schema:
+ - datacenters(id PK, name)
+ - worlds(id PK, name, datacenter_id FK)
+ - districts(id PK, name)
+ - wards(id PK, world_id FK, district_id FK, ward_number)
+ - plots(id PK, ward_id FK, plot_number, size, price, purchase_system, first_seen_time, last_updated_time, ...)
+ - A world refresh wipes that world's plots and re-inserts (idempotent upsert by world_id+district_id+ward_number+plot_number).
+ - datacenter aggregates via SQL JOIN worlds → wards → plots with GROUP BY datacenter.
+
+ Frontend
+
+ frontend/src/
+ ├── api/                 # axios client typed via generated types
+ │   └── paissaApi.ts
+ ├── types/               # TypeScript models (World, DatacenterSummary, WorldStats, Plot)
+ ├── hooks/               # useDatacenters, useLeaderboard, useWorldPlots, useRefresh
+ ├── components/
+ │   └── OwnershipTabs.tsx
+ ├── pages/
+ │   ├── DatacenterPage.tsx      # grid of datacenter cards with open-plot counts + sparkline
+ │   ├── WorldLeaderboardPage.tsx# table: world name, DC icon, total + per-size counts, last updated; filters: size dropdown + ownership tabs
+ │   └── WorldPlotsPage.tsx      # plot grid per district, ward+1 / plot+1 labels, price, lotto status
+ ├── App.tsx              # react-router v6
+ └── main.tsx
+
+ Routes:
+ - / → DatacenterPage (at-a-glance dashboard)
+ - /leaderboard → WorldLeaderboardPage (ranked worlds, filterable)
+ - /worlds/:id → WorldPlotsPage
+
+ Leaderboard interactions: size dropdown (small/medium/large) updates the ranked count column; three ownership tabs (FC-only / Individual-only / Unrestricted) re-query filtered counts. Clicking a datacenter
+ card filters the leaderboard to that DC.
+
+ API Contract (REST)
+
+ ┌────────┬────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────┐
+ │ Method │                          Path                          │                                   Purpose                                    │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ GET    │ /api/worlds                                            │ list worlds + datacenter                                                     │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ GET    │ /api/worlds/{id}                                       │ world detail summary                                                         │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ GET    │ /api/datacenters                                       │ datacenter summary with open-plot aggregates (DC-level leaderboard snapshot) │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ GET    │ /api/leaderboard/worlds?size=&ownership=&datacenterId= │ ranked world list                                                            │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ GET    │ /api/worlds/{id}/plots?size=&ownership=                │ plots for a world (paginated)                                                │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ POST   │ /api/refresh                                           │ admin force-refresh entire DB from PAISSADB                                  │
+ ├────────┼────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────┤
+ │ GET    │ /api/refresh/status                                    │ last run timestamp + in-progress flag                                        │
+ └────────┴────────────────────────────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────┘
+
+ Data Flow
+
+ 1. PlotSyncJob runs every 15 min → RefreshService calls /worlds then each /worlds/{id} → upserts into DB.
+ 2. Manual POST /api/refresh triggers on-demand (admin key in settings.local.json / env).
+ 3. Frontend queries /api/datacenters + /api/leaderboard/worlds for dashboard + leaderboard.
+ 4. Ownership filter is purely a query param; data is stored raw, ownership derived from purchase_system enum at query time.
+
+ Implementation Steps
+
+ Phase 1 — Backend
+
+ 1. Generate Spring Boot starter project (Maven); add deps: spring-boot-starter-web, data-jpa, lombok, mapstruct, webflux (for WebClient), retry, validation.
+ 2. Write entities + repositories with JPA. Create District/Datacenter seed from /worlds. Store districts as a shared (name-keyed) lookup; plots reference district by id.
+ 3. Implement PaissaApiClient (WebClient) + DTOs for /worlds and /worlds/{id}.
+ 4. Implement RefreshService + PlotSyncJob (@Scheduled(fixedDelay = 900_000)). Persist raw plot rows grouped by world id.
+ 5. Implement QueryService with repository queries returning DatacenterSummary (name, plot counts per size, total) and WorldStats (name, dc, per-size counts, oldest plot age) ordered by total.
+ 6. Implement controllers + MapStruct mappers + admin refresh guard (simple bearer token / property flag).
+ 7. application.yml: datasource, Liquibase/Flyway migration, PAISSADB base URL, refresh key.
+
+ Phase 2 — Frontend
+
+ 1. Scaffold Vite + React + TS + Tailwind.
+ 2. Generate/define types matching backend DTOs.
+ 3. Implement API client (axios) with typed endpoints.
+ 4. DatacenterPage: responsive card grid (name, total, Small/Med/Large counts, last updated).
+ 5. WorldLeaderboardPage: filter bar (size select + ownership tabs), sortable ranked table, row highlighting for top DC.
+ 6. WorldPlotsPage: district sections → ward/plot grid, labels using +1 offset, price gil formatting, lotto status badge.
+ 7. Routing + layout + loading/error states.
+
+ Phase 3 — DevOps
+
+ 1. Write docker-compose.yml: postgres, backend, frontend (depends_on, env for refresh key).
+ 2. Add .env example; extend .gitignore.
+ 3. Verify local build + docker compose up.
+
+ Notes & Decisions
+
+ - DDD boundaries: World context owns DC/world/district master data; Housing context owns wards/plots/ownership enums; Ingestion is the anti-corruption layer over PAISSADB; Query context is the read side.
+ - Ownership tab: FC-only plots show only on FC tab; individual-only on individual tab; unrestricted on all three tabs. Implemented by WHERE clause on normalized ownership enum.
+ - Cache strategy: periodic pull + admin force refresh (per user). No need for on-demand fetch in v1.
+ - +1 display offset: applied in backend DTOs / frontend labels, never in DB storage.
+
+ Verification (end-to-end)
+
+ 1. docker compose up — services start, DB migrations run, refresh job fetches all 85 worlds.
+ 2. GET /api/datacenters returns 11 DCs with aggregated counts; top DC has highest total.
+ 3. GET /api/leaderboard/worlds?size=2&ownership=FC_ONLY returns ranked list of large FC plots per world.
+ 4. POST /api/refresh re-syncs; /api/refresh/status shows updated timestamp.
+ 5. Frontend: dashboard shows datacenter cards; switching ownership tab re-ranks worlds; clicking a world opens plot grid with +1 ward/plot labels and lotto badges.
+ 6. Confirm FC-only plots only appear under FC tab (spot-check a known FC-only world).
