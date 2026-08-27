@@ -1,32 +1,37 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MultiSelect } from '../components/MultiSelect';
 import { OwnershipTabs } from '../components/OwnershipTabs';
 import { useDistricts } from '../hooks/useDistricts';
 import { useLeaderboard } from '../hooks/useLeaderboard';
-import type { Ownership, PlotSize } from '../types';
+import type { Ownership, PlotSize, Region } from '../types';
+import { REGIONS, REGION_LABELS, SIZE_LABELS } from '../utils/format';
 
-const SIZE_OPTIONS: { value: PlotSize | ''; label: string }[] = [
-  { value: '', label: 'All sizes (total)' },
-  { value: 'SMALL', label: 'Small' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'LARGE', label: 'Large' },
+const SIZE_OPTIONS: { value: PlotSize; label: string }[] = [
+  { value: 'SMALL', label: SIZE_LABELS.SMALL },
+  { value: 'MEDIUM', label: SIZE_LABELS.MEDIUM },
+  { value: 'LARGE', label: SIZE_LABELS.LARGE },
 ];
+
+function parseListParam<T extends string>(value: string | null): T[] {
+  return value ? (value.split(',') as T[]) : [];
+}
 
 export default function WorldLeaderboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const ownership = (searchParams.get('ownership') as Ownership | null) ?? 'FC_ONLY';
-  const size = (searchParams.get('size') as PlotSize | null) ?? undefined;
+  const size = parseListParam<PlotSize>(searchParams.get('size'));
   const datacenterIdParam = searchParams.get('datacenterId');
   const datacenterId = datacenterIdParam ? Number(datacenterIdParam) : undefined;
-  const districtIdParam = searchParams.get('districtId');
-  const districtId = districtIdParam ? Number(districtIdParam) : undefined;
+  const districtId = parseListParam(searchParams.get('districtId')).map(Number);
+  const region = (searchParams.get('region') as Region | null) ?? undefined;
 
   const { data: districts } = useDistricts();
-  const { data, loading, error } = useLeaderboard({ size, ownership, datacenterId, districtId });
+  const { data, loading, error } = useLeaderboard({ size, ownership, datacenterId, districtId, region });
 
-  const rankColumnLabel = size ? `${size.charAt(0)}${size.slice(1).toLowerCase()}` : 'Total';
+  const rankColumnLabel = size.length === 0 ? 'Total' : size.map((s) => SIZE_LABELS[s]).join(' + ');
 
   const rows = useMemo(() => data ?? [], [data]);
 
@@ -35,6 +40,11 @@ export default function WorldLeaderboardPage() {
     if (value) next.set(key, value);
     else next.delete(key);
     setSearchParams(next);
+  }
+
+  function rankValueFor(w: (typeof rows)[number]) {
+    if (size.length === 0) return w.totalCount;
+    return size.reduce((sum, s) => sum + (s === 'SMALL' ? w.smallCount : s === 'MEDIUM' ? w.mediumCount : w.largeCount), 0);
   }
 
   return (
@@ -47,27 +57,29 @@ export default function WorldLeaderboardPage() {
       <div className="flex flex-wrap items-center gap-3">
         <OwnershipTabs value={ownership} onChange={(v) => updateParam('ownership', v)} />
 
-        <select
-          value={size ?? ''}
-          onChange={(e) => updateParam('size', e.target.value || undefined)}
-          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
-        >
-          {SIZE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <MultiSelect
+          label="Size"
+          options={SIZE_OPTIONS}
+          selected={size}
+          onChange={(values) => updateParam('size', values.length ? values.join(',') : undefined)}
+        />
+
+        <MultiSelect
+          label="District"
+          options={(districts ?? []).map((d) => ({ value: d.id, label: d.name }))}
+          selected={districtId}
+          onChange={(values) => updateParam('districtId', values.length ? values.join(',') : undefined)}
+        />
 
         <select
-          value={districtId ?? ''}
-          onChange={(e) => updateParam('districtId', e.target.value || undefined)}
+          value={region ?? ''}
+          onChange={(e) => updateParam('region', e.target.value || undefined)}
           className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
         >
-          <option value="">All districts</option>
-          {districts?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
+          <option value="">All regions</option>
+          {REGIONS.map((r) => (
+            <option key={r} value={r}>
+              {REGION_LABELS[r]}
             </option>
           ))}
         </select>
@@ -101,24 +113,23 @@ export default function WorldLeaderboardPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((w, i) => {
-                const rankValue = size === 'SMALL' ? w.smallCount : size === 'MEDIUM' ? w.mediumCount : size === 'LARGE' ? w.largeCount : w.totalCount;
-                return (
-                  <tr
-                    key={w.worldId}
-                    onClick={() => navigate(`/worlds/${w.worldId}`)}
-                    className="cursor-pointer border-t border-slate-800 hover:bg-slate-900"
-                  >
-                    <td className="px-4 py-2 text-slate-500">{i + 1}</td>
-                    <td className="px-4 py-2 font-medium">{w.worldName}</td>
-                    <td className="px-4 py-2 text-slate-400">{w.datacenterName}</td>
-                    <td className="px-4 py-2 text-right">{w.smallCount.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right">{w.mediumCount.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right">{w.largeCount.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-indigo-400">{rankValue.toLocaleString()}</td>
-                  </tr>
-                );
-              })}
+              {rows.map((w, i) => (
+                <tr
+                  key={w.worldId}
+                  onClick={() => navigate(`/worlds/${w.worldId}`)}
+                  className="cursor-pointer border-t border-slate-800 hover:bg-slate-900"
+                >
+                  <td className="px-4 py-2 text-slate-500">{i + 1}</td>
+                  <td className="px-4 py-2 font-medium">{w.worldName}</td>
+                  <td className="px-4 py-2 text-slate-400">{w.datacenterName}</td>
+                  <td className="px-4 py-2 text-right">{w.smallCount.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right">{w.mediumCount.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right">{w.largeCount.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-right font-semibold text-indigo-400">
+                    {rankValueFor(w).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

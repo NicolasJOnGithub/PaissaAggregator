@@ -58,9 +58,9 @@ public class WorldController {
     @GetMapping("/api/worlds/{id}/plots")
     public ResponseEntity<PagedModel<PlotDto>> worldPlots(
             @PathVariable Integer id,
-            @RequestParam(required = false) PlotSize size,
+            @RequestParam(required = false) List<PlotSize> size,
             @RequestParam(required = false) PurchaseSystem ownership,
-            @RequestParam(required = false) Integer districtId,
+            @RequestParam(required = false) List<Integer> districtId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int pageSize) {
         if (worldRepository.findById(id).isEmpty()) {

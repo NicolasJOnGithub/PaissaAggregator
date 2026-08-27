@@ -3,6 +3,10 @@ package com.paissa.aggregator.query;
 import com.paissa.aggregator.housing.Plot;
 import com.paissa.aggregator.housing.PlotSize;
 import com.paissa.aggregator.housing.PurchaseSystem;
+import com.paissa.aggregator.world.DatacenterRegions;
+import com.paissa.aggregator.world.District;
+import com.paissa.aggregator.world.DistrictRepository;
+import com.paissa.aggregator.world.Region;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -18,8 +22,9 @@ import org.springframework.stereotype.Service;
 public class QueryService {
 
     private final PlotQueryRepository plotQueryRepository;
+    private final DistrictRepository districtRepository;
 
-    public List<DatacenterSummary> datacenterSummaries() {
+    public List<DatacenterSummary> datacenterSummaries(Region region) {
         Map<Integer, MutableCounts> byDatacenter = new LinkedHashMap<>();
         Map<Integer, String> names = new LinkedHashMap<>();
 
@@ -29,26 +34,35 @@ public class QueryService {
         }
 
         List<DatacenterSummary> summaries = new ArrayList<>();
-        byDatacenter.forEach((id, counts) -> summaries.add(new DatacenterSummary(
-                id, names.get(id), counts.small, counts.medium, counts.large, counts.total())));
+        byDatacenter.forEach((id, counts) -> {
+            String name = names.get(id);
+            if (region == null || DatacenterRegions.of(name) == region) {
+                summaries.add(new DatacenterSummary(id, name, counts.small, counts.medium, counts.large, counts.total()));
+            }
+        });
         summaries.sort(Comparator.comparingLong(DatacenterSummary::totalCount).reversed());
         return summaries;
     }
 
     /**
      * Ranked worlds under the given ownership tab (defaults to counting every ownership type when
-     * {@code ownership} is null), optionally scoped to one datacenter and/or one district. Every row
-     * carries the full small/medium/large breakdown; {@code rankBy} only selects which column worlds
-     * are sorted by.
+     * {@code ownership} is null), optionally scoped to a datacenter, a region, and/or a set of
+     * districts. Every row always carries the full small/medium/large breakdown; {@code rankSizes}
+     * only selects which sizes are summed for sorting (empty/null means rank by total).
      */
     public List<WorldStats> worldLeaderboard(
-            PlotSize rankBy, PurchaseSystem ownership, Integer datacenterId, Integer districtId) {
+            List<PlotSize> rankSizes,
+            PurchaseSystem ownership,
+            Integer datacenterId,
+            List<Integer> districtIds,
+            Region region) {
         List<Integer> purchaseSystemCodes = ownership != null ? ownership.rawCodesForTab() : allRawCodes();
 
         Map<Integer, MutableCounts> countsByWorld = new LinkedHashMap<>();
         Map<Integer, WorldIdentity> identities = new LinkedHashMap<>();
 
-        for (WorldSizeCountRow row : plotQueryRepository.countByWorldAndSize(purchaseSystemCodes, datacenterId, districtId)) {
+        for (WorldSizeCountRow row :
+                plotQueryRepository.countByWorldAndSize(purchaseSystemCodes, datacenterId, effectiveDistrictIds(districtIds))) {
             identities.putIfAbsent(row.worldId(), new WorldIdentity(row.worldName(), row.datacenterId(), row.datacenterName()));
             countsByWorld.computeIfAbsent(row.worldId(), id -> new MutableCounts()).add(row.size(), row.count());
         }
@@ -56,6 +70,9 @@ public class QueryService {
         List<WorldStats> stats = new ArrayList<>();
         countsByWorld.forEach((worldId, counts) -> {
             WorldIdentity identity = identities.get(worldId);
+            if (region != null && DatacenterRegions.of(identity.datacenterName()) != region) {
+                return;
+            }
             stats.add(new WorldStats(
                     worldId,
                     identity.name(),
@@ -67,23 +84,22 @@ public class QueryService {
                     counts.total()));
         });
 
-        Comparator<WorldStats> byRankColumn = rankBy == null
+        Comparator<WorldStats> byRankColumn = (rankSizes == null || rankSizes.isEmpty())
                 ? Comparator.comparingLong(WorldStats::totalCount)
-                : switch (rankBy) {
-                    case SMALL -> Comparator.comparingLong(WorldStats::smallCount);
-                    case MEDIUM -> Comparator.comparingLong(WorldStats::mediumCount);
-                    case LARGE -> Comparator.comparingLong(WorldStats::largeCount);
-                };
+                : Comparator.comparingLong(w -> sumSelectedSizes(w, rankSizes));
         stats.sort(byRankColumn.reversed());
         return stats;
     }
 
     public Page<Plot> worldPlots(
-            Integer worldId, PlotSize size, PurchaseSystem ownership, Integer districtId, Pageable pageable) {
+            Integer worldId,
+            List<PlotSize> sizes,
+            PurchaseSystem ownership,
+            List<Integer> districtIds,
+            Pageable pageable) {
         List<Integer> purchaseSystemCodes = ownership != null ? ownership.rawCodesForTab() : allRawCodes();
-        return size != null
-                ? plotQueryRepository.findWorldPlotsBySize(worldId, size, purchaseSystemCodes, districtId, pageable)
-                : plotQueryRepository.findWorldPlots(worldId, purchaseSystemCodes, districtId, pageable);
+        return plotQueryRepository.findWorldPlots(
+                worldId, effectiveSizes(sizes), purchaseSystemCodes, effectiveDistrictIds(districtIds), pageable);
     }
 
     /** Unfiltered small/medium/large breakdown for one world (0s if it hasn't been synced yet). */
@@ -93,6 +109,30 @@ public class QueryService {
             counts.add(row.size(), row.count());
         }
         return new SizeCounts(counts.small, counts.medium, counts.large);
+    }
+
+    private static long sumSelectedSizes(WorldStats stats, List<PlotSize> sizes) {
+        long sum = 0;
+        for (PlotSize size : sizes) {
+            sum += switch (size) {
+                case SMALL -> stats.smallCount();
+                case MEDIUM -> stats.mediumCount();
+                case LARGE -> stats.largeCount();
+            };
+        }
+        return sum;
+    }
+
+    private static List<PlotSize> effectiveSizes(List<PlotSize> sizes) {
+        return (sizes == null || sizes.isEmpty()) ? List.of(PlotSize.values()) : sizes;
+    }
+
+    /** No district filter is expressed as "every known district id" to keep the JPQL IN clause non-nullable. */
+    private List<Integer> effectiveDistrictIds(List<Integer> districtIds) {
+        if (districtIds != null && !districtIds.isEmpty()) {
+            return districtIds;
+        }
+        return districtRepository.findAll().stream().map(District::getId).toList();
     }
 
     private static List<Integer> allRawCodes() {

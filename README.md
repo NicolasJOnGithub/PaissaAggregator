@@ -52,16 +52,17 @@ curl http://localhost:8080/api/refresh/status
 Open http://localhost:3000.
 
 - **Datacenters** (`/`) — one card per datacenter with its total open-plot count and a
-  small/medium/large breakdown. Click a card to jump to the leaderboard filtered to that
-  datacenter.
+  small/medium/large breakdown. Filter to one region (Japan / North America / Europe / Oceania)
+  with the region dropdown. Click a card to jump to the leaderboard filtered to that datacenter.
 - **Leaderboard** (`/leaderboard`) — worlds ranked by open plots. Use the ownership tabs
-  (FC-only / Individual-only / Unrestricted), the size dropdown, and the district dropdown (Mist,
-  The Lavender Beds, The Goblet, Shirogane, Empyreum) to change what's ranked; unrestricted plots
-  always count on every ownership tab, since anyone can buy them. Click a world row to see its
-  actual plots.
+  (FC-only / Individual-only / Unrestricted, single-select) plus the size and district dropdowns
+  (both multi-select — e.g. check both Mist and The Lavender Beds, or both Small and Medium, to
+  combine them) and the region dropdown to change what's ranked. Picking multiple sizes ranks by
+  their combined total; unrestricted plots always count on every ownership tab, since anyone can
+  buy them. Click a world row to see its actual plots.
 - **World plots** (`/worlds/:id`) — every open plot for that world, grouped by district, with
   in-game ward/plot numbers, price, and ownership. Same ownership/size/district filters as the
-  leaderboard.
+  leaderboard (size and district are multi-select here too).
 
 ### Triggering a manual refresh
 
@@ -75,20 +76,44 @@ curl -X POST http://localhost:8080/api/refresh -H "X-Refresh-Key: <your REFRESH_
 
 Returns `202` if a sync just started, `409` if one's already running, `401` if the key is wrong.
 
-## Local development (without Docker)
+## Local development (backend/frontend running directly, not in Docker)
 
-Backend (needs a local Postgres — see `docker-compose.yml` for the expected db/user/password, or
-just run `docker compose up postgres` and point at it):
+This runs the backend as a plain `mvn spring-boot:run` process and the frontend as a Vite dev
+server, both against a Postgres started via Compose. Useful for faster edit/reload loops than
+rebuilding Docker images each time.
+
+Requires JDK 21 and Maven locally (`java --version`, `mvn --version`). If your default JDK is
+older, point `JAVA_HOME` at a 21 install for the `mvn` command below.
+
+**1. Start just Postgres**, exposed to the host so a locally-run backend can reach it:
+
+```bash
+cp .env.example .env   # if you haven't already
+docker compose up -d postgres
+```
+
+This publishes Postgres on `localhost:${POSTGRES_PORT:-5432}` (only `postgres` has this host port
+mapping — `backend`/`frontend` are still meant to run via `docker compose up`, not this flow).
+
+**2. Run the backend:**
 
 ```bash
 cd backend
-DB_URL=jdbc:postgresql://localhost:5432/paissa REFRESH_KEY=dev mvn spring-boot:run
+DB_URL=jdbc:postgresql://localhost:5432/paissa DB_USER=paissa DB_PASSWORD=paissa REFRESH_KEY=dev \
+  mvn spring-boot:run
 ```
 
-Frontend (proxies `/api` to `localhost:8080` in dev — see `vite.config.ts`):
+Adjust the port/user/password if you changed them in `.env`. On startup it runs Flyway migrations
+against the same database docker-compose uses, then starts syncing from PAISSADB — same ~15 minute
+first sync as above. It listens on `localhost:8080`.
+
+**3. Run the frontend:**
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+
+Vite's dev server (`localhost:5173`) proxies `/api/*` to `localhost:8080` — see the `proxy` block in
+`vite.config.ts` if you need to point it elsewhere.

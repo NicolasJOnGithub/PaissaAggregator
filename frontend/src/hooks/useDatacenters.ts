@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { paissaApi } from '../api/paissaApi';
-import type { DatacenterSummary } from '../types';
+import type { DatacenterSummary, Region } from '../types';
 
-export function useDatacenters() {
+export function useDatacenters(region?: Region) {
   const [data, setData] = useState<DatacenterSummary[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -11,11 +11,11 @@ export function useDatacenters() {
     setLoading(true);
     setError(null);
     paissaApi
-      .datacenterSummaries()
+      .datacenterSummaries({ region })
       .then(setData)
       .catch(() => setError('Failed to load datacenters'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [region]);
 
   useEffect(() => refetch(), [refetch]);
 

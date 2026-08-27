@@ -25,8 +25,16 @@ export function useLeaderboard(params: LeaderboardParams) {
     return () => {
       cancelled = true;
     };
+    // Arrays are compared by joined value, not reference, so a fresh array literal each render
+    // doesn't retrigger the fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.size, params.ownership, params.datacenterId, params.districtId]);
+  }, [
+    params.size?.join(','),
+    params.ownership,
+    params.datacenterId,
+    params.districtId?.join(','),
+    params.region,
+  ]);
 
   return { data, loading, error };
 }

@@ -1,4 +1,4 @@
-import type { Ownership, PlotSize } from '../types';
+import type { Ownership, PlotSize, Region } from '../types';
 
 export function formatGil(amount: number): string {
   return `${amount.toLocaleString('en-US')} gil`;
@@ -27,3 +27,12 @@ export const OWNERSHIP_LABELS: Record<Ownership, string> = {
 };
 
 export const OWNERSHIP_TABS: Ownership[] = ['FC_ONLY', 'INDIVIDUAL_ONLY', 'UNRESTRICTED'];
+
+export const REGION_LABELS: Record<Region, string> = {
+  JAPAN: 'Japan',
+  NORTH_AMERICA: 'North America',
+  EUROPE: 'Europe',
+  OCEANIA: 'Oceania',
+};
+
+export const REGIONS: Region[] = ['JAPAN', 'NORTH_AMERICA', 'EUROPE', 'OCEANIA'];

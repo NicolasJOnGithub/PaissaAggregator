@@ -6,25 +6,46 @@ import type {
   Plot,
   PlotSize,
   Ownership,
+  Region,
   RefreshStatus,
   World,
   WorldDetail,
   WorldStats,
 } from '../types';
 
-const client = axios.create({ baseURL: '/api' });
+// Spring's `@RequestParam List<T>` binds repeated `key=a&key=b` pairs, not axios's default
+// `key[]=a&key[]=b` bracket notation — serialize arrays the plain way so multi-select filters work.
+function serializeParams(params: Record<string, unknown>): string {
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (Array.isArray(value)) {
+      value.forEach((v) => search.append(key, String(v)));
+    } else {
+      search.append(key, String(value));
+    }
+  });
+  return search.toString();
+}
+
+const client = axios.create({ baseURL: '/api', paramsSerializer: { serialize: serializeParams } });
+
+export interface DatacenterParams {
+  region?: Region;
+}
 
 export interface LeaderboardParams {
-  size?: PlotSize;
+  size?: PlotSize[];
   ownership?: Ownership;
   datacenterId?: number;
-  districtId?: number;
+  districtId?: number[];
+  region?: Region;
 }
 
 export interface WorldPlotsParams {
-  size?: PlotSize;
+  size?: PlotSize[];
   ownership?: Ownership;
-  districtId?: number;
+  districtId?: number[];
   page?: number;
   pageSize?: number;
 }
@@ -39,7 +60,8 @@ export const paissaApi = {
   worldPlots: (worldId: number, params: WorldPlotsParams = {}) =>
     client.get<PagedResponse<Plot>>(`/worlds/${worldId}/plots`, { params }).then((r) => r.data),
 
-  datacenterSummaries: () => client.get<DatacenterSummary[]>('/datacenters').then((r) => r.data),
+  datacenterSummaries: (params: DatacenterParams = {}) =>
+    client.get<DatacenterSummary[]>('/datacenters', { params }).then((r) => r.data),
 
   worldLeaderboard: (params: LeaderboardParams = {}) =>
     client.get<WorldStats[]>('/leaderboard/worlds', { params }).then((r) => r.data),

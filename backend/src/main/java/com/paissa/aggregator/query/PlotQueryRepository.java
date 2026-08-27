@@ -9,6 +9,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+/**
+ * {@code districtIds} params are always the full set of known district ids when the caller means
+ * "no district filter" (see {@code QueryService}) rather than null — a null/empty collection bound
+ * to an {@code IN} clause is a known Hibernate footgun, so callers normalize away the "no filter"
+ * case before it gets here instead of this repository trying to special-case it in JPQL.
+ */
 public interface PlotQueryRepository extends JpaRepository<Plot, Long> {
 
     @Query(
@@ -25,13 +31,13 @@ public interface PlotQueryRepository extends JpaRepository<Plot, Long> {
             from Plot p join p.ward wd join wd.world w join w.datacenter dc
             where p.purchaseSystem in :purchaseSystemCodes
               and (:datacenterId is null or dc.id = :datacenterId)
-              and (:districtId is null or wd.district.id = :districtId)
+              and wd.district.id in :districtIds
             group by w.id, w.name, dc.id, dc.name, p.size
             """)
     List<WorldSizeCountRow> countByWorldAndSize(
             @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes,
             @Param("datacenterId") Integer datacenterId,
-            @Param("districtId") Integer districtId);
+            @Param("districtIds") List<Integer> districtIds);
 
     @Query(
             """
@@ -49,32 +55,15 @@ public interface PlotQueryRepository extends JpaRepository<Plot, Long> {
             join fetch wd.district d
             join fetch wd.world w
             where w.id = :worldId
+              and p.size in :sizes
               and p.purchaseSystem in :purchaseSystemCodes
-              and (:districtId is null or d.id = :districtId)
+              and d.id in :districtIds
             order by d.id asc, wd.wardNumber asc, p.plotNumber asc
             """)
     Page<Plot> findWorldPlots(
             @Param("worldId") Integer worldId,
+            @Param("sizes") List<PlotSize> sizes,
             @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes,
-            @Param("districtId") Integer districtId,
-            Pageable pageable);
-
-    @Query(
-            """
-            select p from Plot p
-            join fetch p.ward wd
-            join fetch wd.district d
-            join fetch wd.world w
-            where w.id = :worldId
-              and p.size = :size
-              and p.purchaseSystem in :purchaseSystemCodes
-              and (:districtId is null or d.id = :districtId)
-            order by d.id asc, wd.wardNumber asc, p.plotNumber asc
-            """)
-    Page<Plot> findWorldPlotsBySize(
-            @Param("worldId") Integer worldId,
-            @Param("size") PlotSize size,
-            @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes,
-            @Param("districtId") Integer districtId,
+            @Param("districtIds") List<Integer> districtIds,
             Pageable pageable);
 }

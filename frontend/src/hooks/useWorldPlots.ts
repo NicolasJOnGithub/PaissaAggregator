@@ -25,8 +25,17 @@ export function useWorldPlots(worldId: number, params: WorldPlotsParams) {
     return () => {
       cancelled = true;
     };
+    // Arrays are compared by joined value, not reference, so a fresh array literal each render
+    // doesn't retrigger the fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worldId, params.size, params.ownership, params.districtId, params.page, params.pageSize]);
+  }, [
+    worldId,
+    params.size?.join(','),
+    params.ownership,
+    params.districtId?.join(','),
+    params.page,
+    params.pageSize,
+  ]);
 
   return { data, loading, error };
 }

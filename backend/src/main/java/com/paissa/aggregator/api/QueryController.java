@@ -5,6 +5,7 @@ import com.paissa.aggregator.housing.PurchaseSystem;
 import com.paissa.aggregator.query.DatacenterSummary;
 import com.paissa.aggregator.query.QueryService;
 import com.paissa.aggregator.query.WorldStats;
+import com.paissa.aggregator.world.Region;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,16 +19,17 @@ public class QueryController {
     private final QueryService queryService;
 
     @GetMapping("/api/datacenters")
-    public List<DatacenterSummary> datacenters() {
-        return queryService.datacenterSummaries();
+    public List<DatacenterSummary> datacenters(@RequestParam(required = false) Region region) {
+        return queryService.datacenterSummaries(region);
     }
 
     @GetMapping("/api/leaderboard/worlds")
     public List<WorldStats> worldLeaderboard(
-            @RequestParam(required = false) PlotSize size,
+            @RequestParam(required = false) List<PlotSize> size,
             @RequestParam(required = false) PurchaseSystem ownership,
             @RequestParam(required = false) Integer datacenterId,
-            @RequestParam(required = false) Integer districtId) {
-        return queryService.worldLeaderboard(size, ownership, datacenterId, districtId);
+            @RequestParam(required = false) List<Integer> districtId,
+            @RequestParam(required = false) Region region) {
+        return queryService.worldLeaderboard(size, ownership, datacenterId, districtId, region);
     }
 }

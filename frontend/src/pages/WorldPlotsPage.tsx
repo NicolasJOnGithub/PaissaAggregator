@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { paissaApi } from '../api/paissaApi';
+import { MultiSelect } from '../components/MultiSelect';
 import { OwnershipTabs } from '../components/OwnershipTabs';
 import { useDistricts } from '../hooks/useDistricts';
 import { useWorldPlots } from '../hooks/useWorldPlots';
@@ -8,6 +9,12 @@ import type { Ownership, Plot, PlotSize, WorldDetail } from '../types';
 import { OWNERSHIP_LABELS, SIZE_LABELS, formatGil } from '../utils/format';
 
 const PAGE_SIZE = 200;
+
+const SIZE_OPTIONS: { value: PlotSize; label: string }[] = [
+  { value: 'SMALL', label: SIZE_LABELS.SMALL },
+  { value: 'MEDIUM', label: SIZE_LABELS.MEDIUM },
+  { value: 'LARGE', label: SIZE_LABELS.LARGE },
+];
 
 function PlotCard({ plot }: { plot: Plot }) {
   const hasActiveLotto = plot.lottoPhase !== null;
@@ -33,16 +40,17 @@ export default function WorldPlotsPage() {
   const worldId = Number(id);
 
   const [world, setWorld] = useState<WorldDetail | null>(null);
-  const [size, setSize] = useState<PlotSize | undefined>(undefined);
+  const [size, setSize] = useState<PlotSize[]>([]);
   const [ownership, setOwnership] = useState<Ownership>('FC_ONLY');
-  const [districtId, setDistrictId] = useState<number | undefined>(undefined);
+  const [districtId, setDistrictId] = useState<number[]>([]);
   const [page, setPage] = useState(0);
 
   const { data: districtOptions } = useDistricts();
 
   useEffect(() => {
     setPage(0);
-  }, [worldId, size, ownership, districtId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worldId, size.join(','), ownership, districtId.join(',')]);
 
   useEffect(() => {
     paissaApi.worldDetail(worldId).then(setWorld).catch(() => setWorld(null));
@@ -70,28 +78,13 @@ export default function WorldPlotsPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <OwnershipTabs value={ownership} onChange={setOwnership} />
-        <select
-          value={size ?? ''}
-          onChange={(e) => setSize((e.target.value || undefined) as PlotSize | undefined)}
-          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
-        >
-          <option value="">All sizes</option>
-          <option value="SMALL">Small</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="LARGE">Large</option>
-        </select>
-        <select
-          value={districtId ?? ''}
-          onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : undefined)}
-          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
-        >
-          <option value="">All districts</option>
-          {districtOptions?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
+        <MultiSelect label="Size" options={SIZE_OPTIONS} selected={size} onChange={setSize} />
+        <MultiSelect
+          label="District"
+          options={(districtOptions ?? []).map((d) => ({ value: d.id, label: d.name }))}
+          selected={districtId}
+          onChange={setDistrictId}
+        />
       </div>
 
       {loading && <p className="text-slate-400">Loading plots…</p>}

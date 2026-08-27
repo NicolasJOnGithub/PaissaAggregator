@@ -2,6 +2,8 @@ export type PlotSize = 'SMALL' | 'MEDIUM' | 'LARGE';
 
 export type Ownership = 'FC_ONLY' | 'INDIVIDUAL_ONLY' | 'UNRESTRICTED';
 
+export type Region = 'JAPAN' | 'NORTH_AMERICA' | 'EUROPE' | 'OCEANIA';
+
 export interface World {
   id: number;
   name: string;

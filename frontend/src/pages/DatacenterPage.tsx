@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDatacenters } from '../hooks/useDatacenters';
-import type { DatacenterSummary } from '../types';
+import type { DatacenterSummary, Region } from '../types';
+import { REGIONS, REGION_LABELS } from '../utils/format';
 
 function DatacenterCard({ dc, onClick }: { dc: DatacenterSummary; onClick: () => void }) {
   return (
@@ -32,7 +34,8 @@ function DatacenterCard({ dc, onClick }: { dc: DatacenterSummary; onClick: () =>
 }
 
 export default function DatacenterPage() {
-  const { data, loading, error } = useDatacenters();
+  const [region, setRegion] = useState<Region | undefined>(undefined);
+  const { data, loading, error } = useDatacenters(region);
   const navigate = useNavigate();
 
   return (
@@ -41,6 +44,19 @@ export default function DatacenterPage() {
         <h1 className="text-2xl font-bold">Open Plots by Datacenter</h1>
         <p className="text-slate-400">At-a-glance view of available housing plots across every datacenter.</p>
       </div>
+
+      <select
+        value={region ?? ''}
+        onChange={(e) => setRegion((e.target.value || undefined) as Region | undefined)}
+        className="w-fit rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+      >
+        <option value="">All regions</option>
+        {REGIONS.map((r) => (
+          <option key={r} value={r}>
+            {REGION_LABELS[r]}
+          </option>
+        ))}
+      </select>
 
       {loading && <p className="text-slate-400">Loading datacenters…</p>}
       {error && <p className="text-red-400">{error}</p>}
