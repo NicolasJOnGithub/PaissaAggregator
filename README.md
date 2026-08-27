@@ -55,11 +55,13 @@ Open http://localhost:3000.
   small/medium/large breakdown. Click a card to jump to the leaderboard filtered to that
   datacenter.
 - **Leaderboard** (`/leaderboard`) — worlds ranked by open plots. Use the ownership tabs
-  (FC-only / Individual-only / Unrestricted) and the size dropdown to change what's ranked;
-  unrestricted plots always count on every tab, since anyone can buy them. Click a world row to
-  see its actual plots.
+  (FC-only / Individual-only / Unrestricted), the size dropdown, and the district dropdown (Mist,
+  The Lavender Beds, The Goblet, Shirogane, Empyreum) to change what's ranked; unrestricted plots
+  always count on every ownership tab, since anyone can buy them. Click a world row to see its
+  actual plots.
 - **World plots** (`/worlds/:id`) — every open plot for that world, grouped by district, with
-  in-game ward/plot numbers, price, and ownership. Same ownership/size filters as the leaderboard.
+  in-game ward/plot numbers, price, and ownership. Same ownership/size/district filters as the
+  leaderboard.
 
 ### Triggering a manual refresh
 
