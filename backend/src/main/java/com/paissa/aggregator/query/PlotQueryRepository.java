@@ -25,10 +25,13 @@ public interface PlotQueryRepository extends JpaRepository<Plot, Long> {
             from Plot p join p.ward wd join wd.world w join w.datacenter dc
             where p.purchaseSystem in :purchaseSystemCodes
               and (:datacenterId is null or dc.id = :datacenterId)
+              and (:districtId is null or wd.district.id = :districtId)
             group by w.id, w.name, dc.id, dc.name, p.size
             """)
     List<WorldSizeCountRow> countByWorldAndSize(
-            @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes, @Param("datacenterId") Integer datacenterId);
+            @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes,
+            @Param("datacenterId") Integer datacenterId,
+            @Param("districtId") Integer districtId);
 
     @Query(
             """
@@ -47,10 +50,14 @@ public interface PlotQueryRepository extends JpaRepository<Plot, Long> {
             join fetch wd.world w
             where w.id = :worldId
               and p.purchaseSystem in :purchaseSystemCodes
+              and (:districtId is null or d.id = :districtId)
             order by d.id asc, wd.wardNumber asc, p.plotNumber asc
             """)
     Page<Plot> findWorldPlots(
-            @Param("worldId") Integer worldId, @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes, Pageable pageable);
+            @Param("worldId") Integer worldId,
+            @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes,
+            @Param("districtId") Integer districtId,
+            Pageable pageable);
 
     @Query(
             """
@@ -61,11 +68,13 @@ public interface PlotQueryRepository extends JpaRepository<Plot, Long> {
             where w.id = :worldId
               and p.size = :size
               and p.purchaseSystem in :purchaseSystemCodes
+              and (:districtId is null or d.id = :districtId)
             order by d.id asc, wd.wardNumber asc, p.plotNumber asc
             """)
     Page<Plot> findWorldPlotsBySize(
             @Param("worldId") Integer worldId,
             @Param("size") PlotSize size,
             @Param("purchaseSystemCodes") List<Integer> purchaseSystemCodes,
+            @Param("districtId") Integer districtId,
             Pageable pageable);
 }

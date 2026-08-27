@@ -26,7 +26,7 @@ export function useWorldPlots(worldId: number, params: WorldPlotsParams) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worldId, params.size, params.ownership, params.page, params.pageSize]);
+  }, [worldId, params.size, params.ownership, params.districtId, params.page, params.pageSize]);
 
   return { data, loading, error };
 }

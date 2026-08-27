@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type {
   DatacenterSummary,
+  District,
   PagedResponse,
   Plot,
   PlotSize,
@@ -17,17 +18,21 @@ export interface LeaderboardParams {
   size?: PlotSize;
   ownership?: Ownership;
   datacenterId?: number;
+  districtId?: number;
 }
 
 export interface WorldPlotsParams {
   size?: PlotSize;
   ownership?: Ownership;
+  districtId?: number;
   page?: number;
   pageSize?: number;
 }
 
 export const paissaApi = {
   listWorlds: () => client.get<World[]>('/worlds').then((r) => r.data),
+
+  listDistricts: () => client.get<District[]>('/districts').then((r) => r.data),
 
   worldDetail: (worldId: number) => client.get<WorldDetail>(`/worlds/${worldId}`).then((r) => r.data),
 

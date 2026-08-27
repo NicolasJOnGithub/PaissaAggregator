@@ -26,7 +26,8 @@ public class QueryController {
     public List<WorldStats> worldLeaderboard(
             @RequestParam(required = false) PlotSize size,
             @RequestParam(required = false) PurchaseSystem ownership,
-            @RequestParam(required = false) Integer datacenterId) {
-        return queryService.worldLeaderboard(size, ownership, datacenterId);
+            @RequestParam(required = false) Integer datacenterId,
+            @RequestParam(required = false) Integer districtId) {
+        return queryService.worldLeaderboard(size, ownership, datacenterId, districtId);
     }
 }

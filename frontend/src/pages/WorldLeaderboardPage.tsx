@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { OwnershipTabs } from '../components/OwnershipTabs';
+import { useDistricts } from '../hooks/useDistricts';
 import { useLeaderboard } from '../hooks/useLeaderboard';
 import type { Ownership, PlotSize } from '../types';
 
@@ -19,8 +20,11 @@ export default function WorldLeaderboardPage() {
   const size = (searchParams.get('size') as PlotSize | null) ?? undefined;
   const datacenterIdParam = searchParams.get('datacenterId');
   const datacenterId = datacenterIdParam ? Number(datacenterIdParam) : undefined;
+  const districtIdParam = searchParams.get('districtId');
+  const districtId = districtIdParam ? Number(districtIdParam) : undefined;
 
-  const { data, loading, error } = useLeaderboard({ size, ownership, datacenterId });
+  const { data: districts } = useDistricts();
+  const { data, loading, error } = useLeaderboard({ size, ownership, datacenterId, districtId });
 
   const rankColumnLabel = size ? `${size.charAt(0)}${size.slice(1).toLowerCase()}` : 'Total';
 
@@ -51,6 +55,19 @@ export default function WorldLeaderboardPage() {
           {SIZE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={districtId ?? ''}
+          onChange={(e) => updateParam('districtId', e.target.value || undefined)}
+          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+        >
+          <option value="">All districts</option>
+          {districts?.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
             </option>
           ))}
         </select>

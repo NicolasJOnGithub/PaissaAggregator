@@ -9,6 +9,11 @@ export interface World {
   datacenterName: string;
 }
 
+export interface District {
+  id: number;
+  name: string;
+}
+
 export interface WorldDetail extends World {
   smallCount: number;
   mediumCount: number;

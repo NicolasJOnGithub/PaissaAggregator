@@ -26,7 +26,7 @@ export function useLeaderboard(params: LeaderboardParams) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.size, params.ownership, params.datacenterId]);
+  }, [params.size, params.ownership, params.datacenterId, params.districtId]);
 
   return { data, loading, error };
 }

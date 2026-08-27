@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { paissaApi } from '../api/paissaApi';
 import { OwnershipTabs } from '../components/OwnershipTabs';
+import { useDistricts } from '../hooks/useDistricts';
 import { useWorldPlots } from '../hooks/useWorldPlots';
 import type { Ownership, Plot, PlotSize, WorldDetail } from '../types';
 import { OWNERSHIP_LABELS, SIZE_LABELS, formatGil } from '../utils/format';
@@ -34,23 +35,26 @@ export default function WorldPlotsPage() {
   const [world, setWorld] = useState<WorldDetail | null>(null);
   const [size, setSize] = useState<PlotSize | undefined>(undefined);
   const [ownership, setOwnership] = useState<Ownership>('FC_ONLY');
+  const [districtId, setDistrictId] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(0);
+
+  const { data: districtOptions } = useDistricts();
 
   useEffect(() => {
     setPage(0);
-  }, [worldId, size, ownership]);
+  }, [worldId, size, ownership, districtId]);
 
   useEffect(() => {
     paissaApi.worldDetail(worldId).then(setWorld).catch(() => setWorld(null));
   }, [worldId]);
 
-  const { data, loading, error } = useWorldPlots(worldId, { size, ownership, page, pageSize: PAGE_SIZE });
+  const { data, loading, error } = useWorldPlots(worldId, { size, ownership, districtId, page, pageSize: PAGE_SIZE });
 
-  const districts = new Map<string, Plot[]>();
+  const plotsByDistrict = new Map<string, Plot[]>();
   for (const plot of data?.content ?? []) {
-    const bucket = districts.get(plot.districtName) ?? [];
+    const bucket = plotsByDistrict.get(plot.districtName) ?? [];
     bucket.push(plot);
-    districts.set(plot.districtName, bucket);
+    plotsByDistrict.set(plot.districtName, bucket);
   }
 
   return (
@@ -76,6 +80,18 @@ export default function WorldPlotsPage() {
           <option value="MEDIUM">Medium</option>
           <option value="LARGE">Large</option>
         </select>
+        <select
+          value={districtId ?? ''}
+          onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : undefined)}
+          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
+        >
+          <option value="">All districts</option>
+          {districtOptions?.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading && <p className="text-slate-400">Loading plots…</p>}
@@ -84,7 +100,7 @@ export default function WorldPlotsPage() {
         <p className="text-slate-400">No open plots match these filters.</p>
       )}
 
-      {[...districts.entries()].map(([districtName, plots]) => (
+      {[...plotsByDistrict.entries()].map(([districtName, plots]) => (
         <section key={districtName} className="flex flex-col gap-2">
           <h2 className="text-lg font-semibold text-slate-200">{districtName}</h2>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
