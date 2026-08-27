@@ -29,6 +29,7 @@ target/
 # Node / frontend
 node_modules/
 dist/
+*.tsbuildinfo
 
 # Env / secrets
 .env
